@@ -64,6 +64,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ac);border-color
 .ovl{position:fixed;inset:0;background:rgba(3,11,31,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}
 .ovl.hide{display:none}
 body:not(.adm) .adm-only{display:none!important}
+.par{font-size:11px;font-weight:600;color:var(--wa)}
+.wa{display:inline-block;margin-top:3px;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600;text-decoration:none;background:var(--okb);color:var(--ok)}
 </style>
 </head>
 <body>
@@ -82,28 +84,28 @@ body:not(.adm) .adm-only{display:none!important}
 <div class="stats" id="stats"></div>
 <div class="card">
 <h2>Produtos em negociação</h2>
-<div class="bar"><input id="q" placeholder="Buscar produto, observação ou cliente…"><select id="fs"><option value="">Todos os status</option><option value="disponivel">Disponível</option><option value="reservado">Reservado</option><option value="vendido">Vendido</option></select></div>
+<div class="bar"><input id="q" placeholder="Buscar produto, observação ou cliente…"><select id="fs"><option value="">Todos os status</option><option value="disponivel">Disponível</option><option value="reservado">Reservado</option><option value="vendido">Vendido</option><option value="parado">⏳ Parados há +60 dias</option></select></div>
 <div class="sc"><table><thead><tr><th>Produto</th><th>Observações</th><th>Valor</th><th>Cliente</th><th>Status</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>
 </div>
 </section>
 
 <section id="v2" class="hide">
-<div class="card"><h2>Cadastrar cliente</h2>
+<div class="card"><h2 id="hc">Cadastrar cliente</h2>
 <div class="g">
 <div><label>Nome *</label><input id="cn"></div><div><label>Telefone</label><input id="ct" inputmode="tel"></div>
 <div><label>E-mail</label><input id="ce" type="email"></div><div><label>Cidade</label><input id="cc"></div></div>
 <div style="margin-top:10px"><label>Observações</label><textarea id="co" rows="2"></textarea></div>
-<div style="margin-top:12px"><button class="btn p" id="sc">Salvar cliente</button><span class="msg" id="m1"></span></div>
+<div style="margin-top:12px"><button class="btn p" id="sc">Salvar cliente</button> <button class="btn hide" id="xc">Cancelar edição</button><span class="msg" id="m1"></span></div>
 </div>
 
-<div class="card"><h2>Cadastrar produto</h2>
+<div class="card"><h2 id="hp">Cadastrar produto</h2>
 <div class="g">
 <div><label>Cliente (dono) *</label><select id="vc"></select></div>
 <div><label>Nome do produto *</label><input id="vm"></div>
 <div><label>Valor (R$)</label><input id="vv" type="number" inputmode="decimal"></div>
 <div><label>Status</label><select id="vs"><option value="disponivel">Disponível</option><option value="reservado">Reservado</option><option value="vendido">Vendido</option></select></div></div>
 <div style="margin-top:10px"><label>Observações</label><textarea id="vo" rows="2"></textarea></div>
-<div style="margin-top:12px"><button class="btn p" id="sv">Salvar produto</button><span class="msg" id="m2"></span></div>
+<div style="margin-top:12px"><button class="btn p" id="sv">Salvar produto</button> <button class="btn hide" id="xp">Cancelar edição</button><span class="msg" id="m2"></span></div>
 </div>
 
 <div class="card"><h2>Clientes cadastrados</h2><div class="sc"><table style="min-width:520px"><tbody id="cl"></tbody></table></div></div>
@@ -159,7 +161,7 @@ async function load(){
   var d=await sb.from("movimentos").select("*");
   if(a.error||b.error){err(a.error||b.error);return}
   D.clientes=a.data;D.vendas=c.data||[];D.movs=d.data||[];
-  D.veiculos=b.data.map(function(p){return{id:p.id,clienteId:p.cliente_id,nome:p.nome,preco:p.valor,obs:p.obs,status:p.status,criadoPor:p.criado_por}});
+  D.veiculos=b.data.map(function(p){return{id:p.id,clienteId:p.cliente_id,nome:p.nome,preco:p.valor,obs:p.obs,status:p.status,criadoPor:p.criado_por,criadoEm:p.created_at}});
   render();
 }
 async function put(col,obj){
@@ -235,32 +237,55 @@ $("sok").onclick=async function(){
   $("sok").disabled=false;$("ovl").classList.add("hide");await load();
 };
 $("mdt").value=today();
+var PARADO=60,editP=null,editC=null;
+function dias(x){return x.criadoEm?Math.floor((Date.now()-new Date(x.criadoEm).getTime())/864e5):0}
+function parado(x){return x.status==="disponivel"&&dias(x)>=PARADO}
+function pn(x){return x.nome||((x.marca||"")+" "+(x.modelo||"")).trim()}
+function wa(tel,txt){var d=String(tel||"").replace(/\D/g,"");if(d.length<10)return"";if(d.length<=11)d="55"+d;
+  return '<a class="wa" target="_blank" rel="noopener" href="https://wa.me/'+d+'?text='+encodeURIComponent(txt)+'">WhatsApp</a>'}
+function endEditP(){editP=null;$("hp").textContent="Cadastrar produto";$("sv").textContent="Salvar produto";$("xp").classList.add("hide");["vm","vo","vv"].forEach(function(i){$(i).value=""});$("vs").value="disponivel"}
+function endEditC(){editC=null;$("hc").textContent="Cadastrar cliente";$("sc").textContent="Salvar cliente";$("xc").classList.add("hide");["cn","ct","ce","cc","co"].forEach(function(i){$(i).value=""})}
+function startEditP(id){
+  var x=D.veiculos.find(function(v){return v.id===id});if(!x)return;
+  endEditC();editP=id;tab(2);
+  $("vc").value=x.clienteId||"";$("vm").value=pn(x);$("vv").value=x.preco==null?"":x.preco;$("vs").value=x.status;$("vo").value=x.obs||"";
+  $("hp").textContent="Editar produto";$("sv").textContent="Salvar alterações";$("xp").classList.remove("hide");
+  $("hp").scrollIntoView({block:"start"});
+}
+function startEditC(id){
+  var c=cli(id);if(!c)return;
+  endEditP();editC=id;tab(2);
+  $("cn").value=c.nome||"";$("ct").value=c.telefone||"";$("ce").value=c.email||"";$("cc").value=c.cidade||"";$("co").value=c.obs||"";
+  $("hc").textContent="Editar cliente";$("sc").textContent="Salvar alterações";$("xc").classList.remove("hide");
+  $("hc").scrollIntoView({block:"start"});
+}
+$("xp").onclick=endEditP;$("xc").onclick=endEditC;
 function cli(id){return D.clientes.find(function(c){return c.id===id})}
 var SL={disponivel:"Disponível",reservado:"Reservado",vendido:"Vendido"};
 
 function render(){
   renderFin();
   var v=D.veiculos,n=function(s){return v.filter(function(x){return x.status===s}).length};
-  $("stats").innerHTML=[["Disponíveis",n("disponivel")],["Reservados",n("reservado")],["Vendidos",n("vendido")],["Clientes",D.clientes.length]]
-    .map(function(a){return '<div class="st"><b>'+a[1]+'</b><span>'+a[0]+'</span></div>'}).join("");
+  $("stats").innerHTML=[["Disponíveis",n("disponivel")],["Reservados",n("reservado")],["Vendidos",n("vendido")],["Clientes",D.clientes.length],["Parados +60 dias",v.filter(parado).length,"parado"]]
+    .map(function(a){return '<div class="st"'+(a[2]?' data-f="'+a[2]+'" style="cursor:pointer;border-left-color:var(--wa)" title="Clique para filtrar"':'')+'><b>'+a[1]+'</b><span>'+a[0]+'</span></div>'}).join("");
   var q=$("q").value.toLowerCase().trim(),fs=$("fs").value;
   var rows=v.filter(function(x){
     var c=cli(x.clienteId)||{},t=[x.nome,x.marca,x.modelo,x.obs,c.nome].join(" ").toLowerCase();
-    return(!q||t.indexOf(q)>-1)&&(!fs||x.status===fs)
+    return(!q||t.indexOf(q)>-1)&&(!fs||(fs==="parado"?parado(x):x.status===fs))
   }).sort(function(a,b){return(a.status==="disponivel"?0:1)-(b.status==="disponivel"?0:1)||String(a.nome||a.marca).localeCompare(String(b.nome||b.marca))});
   $("tb").innerHTML=rows.length?rows.map(function(x){
     var c=cli(x.clienteId)||{nome:"(removido)"};
-    return '<tr><td><b>'+esc(x.nome||((x.marca||"")+" "+(x.modelo||"")))+'</b>'+(x.criadoPor?'<br><span class="by" title="'+esc(x.criadoPor)+'">por '+esc(quem(x.criadoPor))+'</span>':'')+'</td>'
+    return '<tr><td><b>'+esc(x.nome||((x.marca||"")+" "+(x.modelo||"")))+'</b>'+(parado(x)?'<br><span class="par">⏳ '+dias(x)+' dias sem vender</span>':'')+(x.criadoPor?'<br><span class="by" title="'+esc(x.criadoPor)+'">por '+esc(quem(x.criadoPor))+'</span>':'')+'</td>'
     +'<td><small>'+esc(x.obs||"")+'</small></td>'
     +'<td><b>'+brl(x.preco)+'</b></td>'
-    +'<td>'+esc(c.nome)+'<br><small>'+esc(c.telefone||"")+'</small></td>'
+    +'<td>'+esc(c.nome)+'<br><small>'+esc(c.telefone||"")+'</small>'+(c.telefone?'<br>':'')+wa(c.telefone,"Olá, "+c.nome+"! Aqui é da Grupo J. Estou entrando em contato sobre o produto: "+pn(x))+'</td>'
     +'<td><button class="tag '+x.status+'" data-st="'+x.id+'" title="Clique para mudar">'+SL[x.status]+'</button></td>'
-    +'<td style="white-space:nowrap">'+(x.status!=="vendido"?'<button class="x" style="color:var(--ac);margin-right:10px" data-sell="'+x.id+'">Vender</button>':'')+'<button class="x adm-only" data-dv="'+x.id+'">'+(pend[x.id]?"Confirmar?":"Excluir")+'</button></td></tr>'
+    +'<td style="white-space:nowrap">'+'<button class="x" style="color:var(--mut);margin-right:10px" data-ep="'+x.id+'">Editar</button>'+(x.status!=="vendido"?'<button class="x" style="color:var(--ac);margin-right:10px" data-sell="'+x.id+'">Vender</button>':'')+'<button class="x adm-only" data-dv="'+x.id+'">'+(pend[x.id]?"Confirmar?":"Excluir")+'</button></td></tr>'
   }).join(""):'<tr><td colspan="6" class="vz">Nenhum produto encontrado. Use a aba Cadastro para adicionar.</td></tr>';
   $("cl").innerHTML=D.clientes.length?D.clientes.map(function(c){
     var k=v.filter(function(x){return x.clienteId===c.id}).length;
     return '<tr><td><b>'+esc(c.nome)+'</b><br><small>'+esc([c.telefone,c.email,c.cidade].filter(Boolean).join(" · "))+'</small>'+(c.criado_por?'<br><span class="by" title="'+esc(c.criado_por)+'">por '+esc(quem(c.criado_por))+'</span>':'')+'</td><td><small>'+k+' produto(s)</small></td>'
-    +'<td><button class="x adm-only" data-dc="'+c.id+'">'+(pend[c.id]?"Confirmar?":"Excluir")+'</button></td></tr>'
+    +'<td style="white-space:nowrap">'+wa(c.telefone,"Olá, "+c.nome+"! Aqui é da Grupo J. Tudo bem?")+' <button class="x" style="color:var(--mut);margin:0 10px" data-ec="'+c.id+'">Editar</button><button class="x adm-only" data-dc="'+c.id+'">'+(pend[c.id]?"Confirmar?":"Excluir")+'</button></td></tr>'
   }).join(""):'<tr><td class="vz">Nenhum cliente ainda.</td></tr>';
   var sel=$("vc"),cur=sel.value;
   sel.innerHTML='<option value="">Selecione…</option>'+D.clientes.map(function(c){return '<option value="'+c.id+'">'+esc(c.nome)+'</option>'}).join("");
@@ -268,9 +293,12 @@ function render(){
 }
 function ask(id,fn){if(pend[id]){delete pend[id];fn()}else{pend[id]=1;render();setTimeout(function(){delete pend[id];render()},3000)}}
 document.addEventListener("click",function(e){
-  var t=e.target,id;
+  var t=e.target,id,cf=t.closest&&t.closest("[data-f]");
+  if(cf){$("fs").value=cf.getAttribute("data-f");render();return}
   if(id=t.getAttribute("data-st")){var x=D.veiculos.find(function(v){return v.id===id}),o=["disponivel","reservado","vendido"];
     put("veiculos",Object.assign({},x,{status:o[(o.indexOf(x.status)+1)%3]}))}
+  else if(id=t.getAttribute("data-ep"))startEditP(id);
+  else if(id=t.getAttribute("data-ec"))startEditC(id);
   else if(id=t.getAttribute("data-sell"))openSale(id);
   else if(id=t.getAttribute("data-dsale"))ask(id,function(){delT("vendas",id)});
   else if(id=t.getAttribute("data-dm"))ask(id,function(){delT("movimentos",id)});
@@ -284,14 +312,14 @@ $("t1").onclick=function(){tab(1)};$("t2").onclick=function(){tab(2)};$("t3").on
 function flash(id){$(id).textContent="✓ Salvo";setTimeout(function(){$(id).textContent=""},2500)}
 $("sc").onclick=function(){
   var nome=$("cn").value.trim();if(!nome){$("cn").focus();return}
-  put("clientes",{nome:nome,telefone:$("ct").value.trim(),email:$("ce").value.trim(),cidade:$("cc").value.trim(),obs:$("co").value.trim()}).then(function(){
-    ["cn","ct","ce","cc","co"].forEach(function(i){$(i).value=""});flash("m1")});
+  put("clientes",{id:editC||undefined,nome:nome,telefone:$("ct").value.trim(),email:$("ce").value.trim(),cidade:$("cc").value.trim(),obs:$("co").value.trim()}).then(function(){
+    ["cn","ct","ce","cc","co"].forEach(function(i){$(i).value=""});flash("m1");endEditC()});
 };
 $("sv").onclick=function(){
   if(!$("vc").value){$("vc").focus();return}
   if(!$("vm").value.trim()){$("vm").focus();return}
-  put("veiculos",{clienteId:$("vc").value,nome:$("vm").value.trim(),obs:$("vo").value.trim(),preco:$("vv").value,status:$("vs").value}).then(function(){
-    ["vm","vo","vv"].forEach(function(i){$(i).value=""});flash("m2")});
+  put("veiculos",{id:editP||undefined,clienteId:$("vc").value,nome:$("vm").value.trim(),obs:$("vo").value.trim(),preco:$("vv").value,status:$("vs").value}).then(function(){
+    ["vm","vo","vv"].forEach(function(i){$(i).value=""});flash("m2");endEditP()});
 };
 async function gate(){
   var r=await sb.auth.getSession();
